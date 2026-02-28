@@ -112,7 +112,7 @@ func (m Model) renderHeader() string {
 
 	appName := headerTextStyle.Render("⎇  worktree")
 
-	// Build each candidate section as a complete styled string.
+	// Line-1 candidates (excludes fetchedAgo, which is always on line 2).
 	var candidates []string
 	if m.remoteURL != "" {
 		candidates = append(candidates, dimStyle.Render(m.remoteURL))
@@ -123,29 +123,62 @@ func (m Model) renderHeader() string {
 	if m.stashCount > 0 {
 		candidates = append(candidates, warningStyle.Render(fmt.Sprintf("✦ %d stashed", m.stashCount)))
 	}
-	if m.fetchedAgo != "" {
-		candidates = append(candidates, dimStyle.Render("fetched "+m.fetchedAgo))
-	}
 
-	// Atomically fit sections: each section either renders in full or is dropped
-	// along with all lower-priority sections after it.
+	// Greedily fit sections onto line 1; overflow moves to line 2 as whole units.
 	used := lipgloss.Width(appName)
-	var sections []string
+	var line1Sections []string
+	var overflowSections []string
+	overflowing := false
 	for _, c := range candidates {
 		needed := sepW + lipgloss.Width(c)
-		if used+needed > innerW {
-			break
+		if !overflowing && used+needed <= innerW {
+			line1Sections = append(line1Sections, c)
+			used += needed
+		} else {
+			overflowing = true
+			overflowSections = append(overflowSections, c)
 		}
-		sections = append(sections, c)
-		used += needed
 	}
 
-	right := strings.Join(sections, sep)
-	gap := innerW - lipgloss.Width(appName) - lipgloss.Width(right)
-	if gap < 0 {
-		gap = 0
+	// Build line 1: appName on left, fitted sections on right.
+	right1 := strings.Join(line1Sections, sep)
+	gap1 := innerW - lipgloss.Width(appName) - lipgloss.Width(right1)
+	if gap1 < 0 {
+		gap1 = 0
 	}
-	return headerBoxStyle.Width(innerW).Render(appName + strings.Repeat(" ", gap) + right)
+	line1 := appName + strings.Repeat(" ", gap1) + right1
+
+	// Build line 2: overflow sections on left, fetchedAgo always on right.
+	fetchStr := ""
+	if m.fetchedAgo != "" {
+		fetchStr = dimStyle.Render("fetched " + m.fetchedAgo)
+	}
+
+	var line2 string
+	if len(overflowSections) > 0 || fetchStr != "" {
+		left2 := strings.Join(overflowSections, sep)
+		if left2 != "" && fetchStr != "" {
+			gap2 := innerW - lipgloss.Width(left2) - lipgloss.Width(fetchStr)
+			if gap2 < 1 {
+				gap2 = 1
+			}
+			line2 = left2 + strings.Repeat(" ", gap2) + fetchStr
+		} else if fetchStr != "" {
+			gap2 := innerW - lipgloss.Width(fetchStr)
+			if gap2 < 0 {
+				gap2 = 0
+			}
+			line2 = strings.Repeat(" ", gap2) + fetchStr
+		} else {
+			line2 = left2
+		}
+	}
+
+	content := line1
+	if line2 != "" {
+		content = line1 + "\n" + line2
+	}
+	return headerBoxStyle.Width(innerW).Render(content)
 }
 
 // ── Panes ─────────────────────────────────────────────────────────────────────
