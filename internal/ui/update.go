@@ -49,6 +49,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fetchedAgo = msg.fetchedAgo
 		m.defaultBranch = msg.defaultBranch
 		m.ghAvailable = msg.ghAvailable
+		m.hasCommits = msg.hasCommits
 		if m.prCache == nil {
 			m.prCache = make(map[string]prCacheEntry)
 		}
@@ -235,6 +236,15 @@ func (m *Model) openNewModal() {
 // handleNewWorktree dispatches to the type-list handler when the overlay is
 // open, otherwise manages the four-field form.
 func (m Model) handleNewWorktree(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// In the no-commits error state only esc/q is meaningful.
+	if !m.hasCommits {
+		if msg.Type == tea.KeyEsc || msg.String() == "q" {
+			m.state = types.StateList
+			m.resetNewModal()
+		}
+		return m, nil
+	}
+
 	if m.newTypeListOpen {
 		return m.handleTypeList(msg)
 	}

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"errors"
+
 	"github.com/agnishcc/worktree-tui/internal/git"
 	"github.com/agnishcc/worktree-tui/internal/types"
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,6 +31,9 @@ type Model struct {
 	// PR badge cache: absent key = not fetched; nil value = no PR.
 	ghAvailable bool
 	prCache     map[string]prCacheEntry
+
+	// hasCommits is false for a freshly-initialised repo with no commits yet.
+	hasCommits bool
 
 	// New worktree modal.
 	newTypeIdx      int    // index into branchTypes
@@ -74,6 +79,7 @@ type worktreesLoadedMsg struct {
 	fetchedAgo    string
 	defaultBranch string
 	ghAvailable   bool
+	hasCommits    bool
 	err           error
 }
 
@@ -100,6 +106,7 @@ func checkGitRepo() tea.Msg {
 
 func loadWorktrees() tea.Cmd {
 	return func() tea.Msg {
+		root, _ := git.GetRepoRoot()
 		wts, err := git.ListWorktrees()
 		if err != nil {
 			return worktreesLoadedMsg{err: err}
@@ -117,6 +124,7 @@ func loadWorktrees() tea.Cmd {
 			fetchedAgo:    fetchedAgo,
 			defaultBranch: git.GetDefaultBranch(),
 			ghAvailable:   git.IsGHAvailable(),
+			hasCommits:    git.HasCommits(root),
 		}
 	}
 }
@@ -152,6 +160,10 @@ func (m *Model) resetNewModal() {
 
 func createWorktree(displayName, branch, path, description string) tea.Cmd {
 	return func() tea.Msg {
+		root, _ := git.GetRepoRoot()
+		if !git.HasCommits(root) {
+			return worktreeCreatedMsg{err: errors.New("repo has no commits yet — make an initial commit on main before creating worktrees")}
+		}
 		if err := git.AddWorktree(branch, path); err != nil {
 			return worktreeCreatedMsg{err: err}
 		}

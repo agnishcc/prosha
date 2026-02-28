@@ -179,6 +179,14 @@ func (m Model) renderItem(idx int, name string, innerW int, isNewRow bool) strin
 	text := truncate(name, maxNameW)
 
 	if isNewRow {
+		if !m.hasCommits {
+			// No commits yet — dim the row and add an inline hint.
+			label := padRight(text, maxNameW-18) + "  no commits yet"
+			if selected {
+				return "  " + dimStyle.Render(label)
+			}
+			return "  " + dimStyle.Render(label)
+		}
 		if selected {
 			return selectedAccentStyle.Render("▌") + " " + newItemActiveStyle.Render(padRight(text, maxNameW))
 		}
@@ -196,10 +204,19 @@ func (m Model) renderRightPane(outerW, outerH int) string {
 
 	var content string
 	if m.cursor == 0 {
-		content = dimStyle.Render(
-			"Select \"+ new worktree\" and press enter to create\n" +
-				"or press  n  from anywhere.",
-		)
+		if !m.hasCommits {
+			content = lipgloss.JoinVertical(lipgloss.Left,
+				dimStyle.Render("Worktrees require at least one commit."),
+				"",
+				dimStyle.Render("Run  git commit  on the main branch first,"),
+				dimStyle.Render("then worktrees can be created here."),
+			)
+		} else {
+			content = dimStyle.Render(
+				"Select \"+ new worktree\" and press enter to create\n" +
+					"or press  n  from anywhere.",
+			)
+		}
 	} else if idx := m.cursor - 1; idx < len(m.worktrees) {
 		content = m.renderDetail(m.worktrees[idx], innerW)
 	}
@@ -397,8 +414,26 @@ func (m Model) renderTypeListModal() string {
 	return modalStyle.Render(content)
 }
 
+// renderNoCommitsModal is shown instead of the create form when the repo has no commits.
+func (m Model) renderNoCommitsModal() string {
+	content := lipgloss.JoinVertical(lipgloss.Left,
+		modalTitleStyle.Render("New Worktree"),
+		"",
+		dangerStyle.Render("✗  Cannot create worktree"),
+		"",
+		dimStyle.Render("No commits on main yet."),
+		dimStyle.Render("Make an initial commit first."),
+		"",
+		m.renderHints("esc  close"),
+	)
+	return modalStyle.Render(content)
+}
+
 // renderNewFormModal renders the four-field create form.
 func (m Model) renderNewFormModal() string {
+	if !m.hasCommits {
+		return m.renderNoCommitsModal()
+	}
 	fieldLabel := func(label string, idx int) string {
 		if m.newActiveField == idx {
 			return accentStyle.Render(label)
