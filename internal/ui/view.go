@@ -107,29 +107,45 @@ func (m Model) renderHeader() string {
 		innerW = 4
 	}
 
-	left := headerTextStyle.Render("⎇  worktree")
+	sep := dimStyle.Render(" · ")
+	sepW := lipgloss.Width(sep)
 
-	// Right cluster: remote URL · N worktrees · ✦ N stashed · fetched Xm ago
-	var parts []string
+	appName := headerTextStyle.Render("⎇  worktree")
+
+	// Build each candidate section as a complete styled string.
+	var candidates []string
 	if m.remoteURL != "" {
-		parts = append(parts, dimStyle.Render(m.remoteURL))
+		candidates = append(candidates, dimStyle.Render(m.remoteURL))
 	}
 	if n := len(m.worktrees); n > 0 {
-		parts = append(parts, dimStyle.Render(fmt.Sprintf("%d worktrees", n)))
+		candidates = append(candidates, dimStyle.Render(fmt.Sprintf("%d worktrees", n)))
 	}
 	if m.stashCount > 0 {
-		parts = append(parts, warningStyle.Render(fmt.Sprintf("✦ %d stashed", m.stashCount)))
+		candidates = append(candidates, warningStyle.Render(fmt.Sprintf("✦ %d stashed", m.stashCount)))
 	}
 	if m.fetchedAgo != "" {
-		parts = append(parts, dimStyle.Render("fetched "+m.fetchedAgo))
+		candidates = append(candidates, dimStyle.Render("fetched "+m.fetchedAgo))
 	}
-	right := strings.Join(parts, dimStyle.Render("   ·   "))
 
-	gap := innerW - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
-		gap = 2
+	// Atomically fit sections: each section either renders in full or is dropped
+	// along with all lower-priority sections after it.
+	used := lipgloss.Width(appName)
+	var sections []string
+	for _, c := range candidates {
+		needed := sepW + lipgloss.Width(c)
+		if used+needed > innerW {
+			break
+		}
+		sections = append(sections, c)
+		used += needed
 	}
-	return headerBoxStyle.Width(innerW).Render(left + strings.Repeat(" ", gap) + right)
+
+	right := strings.Join(sections, sep)
+	gap := innerW - lipgloss.Width(appName) - lipgloss.Width(right)
+	if gap < 0 {
+		gap = 0
+	}
+	return headerBoxStyle.Width(innerW).Render(appName + strings.Repeat(" ", gap) + right)
 }
 
 // ── Panes ─────────────────────────────────────────────────────────────────────
